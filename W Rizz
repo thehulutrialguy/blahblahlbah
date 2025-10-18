@@ -1,0 +1,73 @@
+(() => {
+    ModAPI.require("player");
+
+    // The button config: single button that prompts for chat message
+    const chatButton = [{
+        text: "Send Chat",
+        click: () => {
+            const input = window.prompt("Input chat/command:", "");
+            if (input !== null && input !== "") {
+                ModAPI.player.sendChatMessage(ModAPI.util.str(input));
+            }
+        },
+        x: 0,
+        y: 0,
+        w: 100,
+        h: 20,
+        uid: 99999999 // unique id for the button
+    }];
+
+    // Utility function from your original code to add buttons and hook their clicks
+    function button_utility_script(inputArr, bindingClass, actionBindMode) {
+        actionBindMode ||= 0;
+        var button = ModAPI.reflect.getClassById("net.minecraft.client.gui.GuiButton").constructors.find(x => x.length === 6);
+        var originalActionPerformed = ModAPI.hooks.methods[ModAPI.util.getMethodFromPackage(actionBindMode === 2 ? "net.minecraft.client.gui.GuiScreen" : bindingClass, "actionPerformed")];
+        var originalInit = ModAPI.hooks.methods[ModAPI.util.getMethodFromPackage(bindingClass, "initGui")];
+        var out = inputArr.flatMap(x => {
+            var btn = button(x.uid, x.x, x.y, x.w, x.h, ModAPI.util.str(x.text));
+            return btn;
+        });
+        if (actionBindMode !== 1) {
+            ModAPI.hooks.methods[ModAPI.util.getMethodFromPackage(actionBindMode === 2 ? "net.minecraft.client.gui.GuiScreen" : bindingClass, "actionPerformed")] = function (...args) {
+                var id = ModAPI.util.wrap(args[1]).getCorrective().id;
+                var jsAction = inputArr.find(x => x.uid === id);
+                if (jsAction) {
+                    jsAction.click(ModAPI.util.wrap(args[0]));
+                }
+                return originalActionPerformed.apply(this, args);
+            }
+        }
+        ModAPI.hooks.methods[ModAPI.util.getMethodFromPackage(bindingClass, "initGui")] = function (...args) {
+            originalInit.apply(this, args);
+            var gui = ModAPI.util.wrap(args[0]).getCorrective();
+
+            // Position the button bottom right corner, or wherever you want
+            out.forEach(guiButton => {
+                guiButton.x = gui.width - guiButton.width - 10; // 10 px padding from right
+                guiButton.y = gui.height - guiButton.height - 10; // 10 px padding from bottom
+                gui.buttonList.add(guiButton);
+            });
+        }
+    }
+
+    // List of GUI classes you want to inject the button into:
+    const guis = [
+        "net.minecraft.client.gui.inventory.GuiInventory",
+        "net.minecraft.client.gui.inventory.GuiContainerCreative",
+        "net.minecraft.client.gui.inventory.GuiBeacon",
+        "net.minecraft.client.gui.inventory.GuiChest",
+        "net.minecraft.client.gui.inventory.GuiCrafting",
+        "net.minecraft.client.gui.inventory.GuiFurnace",
+        "net.minecraft.client.gui.inventory.GuiDispenser",
+        "net.minecraft.client.gui.inventory.GuiBrewingStand",
+        "net.minecraft.client.gui.inventory.GuiEnchantment"
+    ];
+
+    guis.forEach(guiClass => {
+        button_utility_script(chatButton, guiClass, 0);
+    });
+
+    ModAPI.meta.title("Chat Button for All GUIs");
+    ModAPI.meta.description("Adds a 'Send Chat' button to all major GUIs.");
+
+})();
