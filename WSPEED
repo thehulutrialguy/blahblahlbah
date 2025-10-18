@@ -1,0 +1,162 @@
+//utility function to return an array of GuiButtons from an array of JS objects, while automatically binding them
+function button_utility_script(inputArr) {
+    var buttonCtor = ModAPI.reflect.getClassById("net.minecraft.client.gui.GuiButton").constructors.find(x => x.length === 6);
+    var GuiScreenClass = "net.minecraft.client.gui.GuiScreen";
+
+    var originalInit = ModAPI.hooks.methods[ModAPI.util.getMethodFromPackage(GuiScreenClass, "initGui")];
+    var originalDraw = ModAPI.hooks.methods[ModAPI.util.getMethodFromPackage(GuiScreenClass, "drawScreen")];
+    var originalActionPerformed = ModAPI.hooks.methods[ModAPI.util.getMethodFromPackage(GuiScreenClass, "actionPerformed")];
+
+    // Add buttons once per GUI instance
+    ModAPI.hooks.methods[ModAPI.util.getMethodFromPackage(GuiScreenClass, "initGui")] = function (...args) {
+        originalInit.apply(this, args);
+        try {
+            if (!this._dupeHuntButtonsAdded) {
+                if (this.buttonList && Array.isArray(this.buttonList)) {
+                    var gui = this;
+                    inputArr.forEach(btnDef => {
+                        var btn = buttonCtor(btnDef.uid, btnDef.x, btnDef.y, btnDef.w, btnDef.h, ModAPI.util.str(btnDef.text));
+                        gui.buttonList.add(btn);
+                    });
+                    this._dupeHuntButtonsAdded = true;
+                }
+            }
+        } catch (e) {
+            ModAPI.log(e);
+        }
+    };
+
+    // Forward button clicks to your JS handlers
+    ModAPI.hooks.methods[ModAPI.util.getMethodFromPackage(GuiScreenClass, "actionPerformed")] = function (...args) {
+        try {
+            var id = ModAPI.util.wrap(args[1]).getCorrective().id;
+            var jsAction = inputArr.find(x => x.uid === id);
+            if (jsAction) {
+                jsAction.click(ModAPI.util.wrap(args[0]));
+            }
+        } catch (e) {
+            ModAPI.log(e);
+        }
+        return originalActionPerformed.apply(this, args);
+    };
+
+    // Force draw the buttons (sometimes buttonList not rendered)
+    ModAPI.hooks.methods[ModAPI.util.getMethodFromPackage(GuiScreenClass, "drawScreen")] = function (...args) {
+        originalDraw.apply(this, args);
+        try {
+            if (this.buttonList && Array.isArray(this.buttonList)) {
+                this.buttonList.forEach(btn => {
+                    if (btn.drawButton) btn.drawButton(ModAPI.minecraft, args[0], args[1]);
+                });
+            }
+        } catch (e) {
+            ModAPI.log(e);
+        }
+    };
+}
+
+
+(() => {
+    ModAPI.require("player");
+    var backlog = [];
+    var delayState = false;
+
+    const originalSend = WebSocket.prototype.send;
+
+    //Override WebSocket.send, so when eagler tries to send messages, it runs our code instead
+    Object.defineProperty(WebSocket.prototype, 'send', {
+        configurable: true,
+        enumerable: false,
+        writable: false,
+        value: function (data) {
+            //If blinking, push data to backlog along with it's websocket instance.
+            if (delayState) {
+                backlog.push({ data: data, thisArg: this });
+            } else { //Else send the data as normal
+                originalSend.call(this, data);
+            }
+        }
+    });
+
+    ModAPI.meta.title("Dupe Hunting");
+    ModAPI.meta.description("⚠️Only works over WS, not local. May induce bans.⚠️");
+    ModAPI.meta.credits("by ZXMushroom63");
+
+    var dupeHuntButtons = [{
+        text: "Silently Close",
+        click: () => {
+            ModAPI.minecraft.displayGuiScreen(null);
+        },
+        x: 0,
+        y: 0,
+        w: 100,
+        h: 20,
+        uid: 142715254
+    },
+    {
+        text: "Toggle Delay",
+        click: () => {
+            delayState = !delayState;
+            alert(delayState ? "Delay On" : "Sending Packets...");
+            if (delayState === false) {
+                for (let i = 0; i < backlog.length; i++) {
+                    const backlogItem = backlog[i];
+                    originalSend.call(backlogItem.thisArg, backlogItem.data);
+                }
+                backlog = [];
+            }
+        },
+        x: 0,
+        y: 20,
+        w: 100,
+        h: 20,
+        uid: 142715253
+    },
+    {
+        text: "Server Close",
+        click: () => {
+            var CloseWindow = ModAPI.reflect.getClassByName("C0DPacketCloseWindow").constructors[0];
+            ModAPI.player.sendQueue.addToSendQueue(CloseWindow(ModAPI.player.openContainer.getCorrective().windowId));
+        },
+        x: 0,
+        y: 40,
+        w: 100,
+        h: 20,
+        uid: 142715252
+    },
+    {
+        text: "Send & Disconnect",
+        click: () => {
+            delayState = false;
+            for (let i = 0; i < backlog.length; i++) {
+                const backlogItem = backlog[i];
+                originalSend.call(backlogItem.thisArg, backlogItem.data);
+            }
+            backlog = [];
+            ModAPI.mc.getNetHandler().getNetworkManager().doClientDisconnect(ModAPI.hooks._classMap[ModAPI.util.getCompiledName("net.minecraft.util.ChatComponentText")].constructors[0](ModAPI.util.str("Dupe Hunting Utils Disconnect")));
+        },
+        x: 0,
+        y: 60,
+        w: 100,
+        h: 20,
+        uid: 142715251
+    },
+    {
+        text: "Use Chat",
+        click: () => {
+            var p = window.prompt("Input chat/command:", "Hello World");
+            if (p) {
+                ModAPI.player.sendChatMessage(ModAPI.util.str(p));
+            }
+        },
+        x: 0,
+        y: 80,
+        w: 100,
+        h: 20,
+        uid: 142715250
+    }];
+
+    // Hook buttons globally for ALL GUIs
+    button_utility_script(dupeHuntButtons);
+
+})();
