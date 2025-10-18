@@ -1,0 +1,58 @@
+(() => {
+    ModAPI.require("player");
+
+    // Hook into GuiScreen.handleKeyboardInput to catch key presses even in GUIs
+    try {
+        const handleKeyboardInputRef = ModAPI.util.getMethodFromPackage("net.minecraft.client.gui.GuiScreen", "handleKeyboardInput");
+        const originalHandleKeyboardInput = ModAPI.hooks.methods[handleKeyboardInputRef];
+
+        ModAPI.hooks.methods[handleKeyboardInputRef] = function(...args) {
+            const guiThis = this;
+
+            try {
+                // LWJGL Keyboard object for input info
+                const Keyboard = window.Keyboard || null;
+                if (!Keyboard) return originalHandleKeyboardInput.apply(this, args);
+
+                if (Keyboard.getEventKeyState && Keyboard.getEventKeyState()) {
+                    const typedChar = Keyboard.getEventCharacter();
+                    if (typedChar && typedChar.toLowerCase() === "p") {
+                        // Check if any text field is focused to avoid interfering with typing
+                        let focusDetected = false;
+                        for (const prop in guiThis) {
+                            if (!guiThis.hasOwnProperty(prop)) continue;
+                            try {
+                                const candidate = guiThis[prop];
+                                if (candidate && typeof candidate.isFocused === "function" && candidate.isFocused()) {
+                                    focusDetected = true;
+                                    break;
+                                }
+                            } catch {}
+                        }
+
+                        if (!focusDetected) {
+                            const input = window.prompt("Input chat/command:", "");
+                            if (input) {
+                                ModAPI.player.sendChatMessage(ModAPI.util.str(input));
+                            }
+                            return; // consume event, prevent further handling
+                        }
+                    }
+                }
+            } catch {}
+
+            return originalHandleKeyboardInput.apply(this, args);
+        };
+    } catch (e) {
+        // If hook fails, fallback to window-level listener for no-GUI case
+        window.addEventListener("keydown", event => {
+            if (event.key && event.key.toLowerCase() === "p" && !ModAPI.mc.currentScreen) {
+                event.preventDefault();
+                const input = window.prompt("Input chat/command:", "");
+                if (input) {
+                    ModAPI.player.sendChatMessage(ModAPI.util.str(input));
+                }
+            }
+        });
+    }
+})();
