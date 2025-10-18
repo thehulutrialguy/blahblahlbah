@@ -1,0 +1,53 @@
+(() => {
+    ModAPI.require("player");
+
+    const mc = ModAPI.mc;
+
+    const sendChat = (msg) => {
+        if (!msg) return;
+        ModAPI.player.sendChatMessage(ModAPI.util.str(msg));
+    };
+
+    // Hook GuiScreen.keyTyped to listen for P key presses even when GUI open
+    const GuiScreenClass = ModAPI.reflect.getClassById("net.minecraft.client.gui.GuiScreen");
+
+    // Save original method
+    const originalKeyTyped = GuiScreenClass.prototype.keyTyped;
+
+    GuiScreenClass.prototype.keyTyped = function(typedChar, keyCode) {
+        // keyCode for 'P' is 25 in Minecraft 1.8 (check LWJGL Keyboard.java)
+        // Alternatively, check typedChar ignoring case:
+        if (typedChar.toLowerCase() === 'p') {
+            // Prompt for chat input
+            const input = window.prompt("Input chat/command:", "");
+            if (input !== null && input !== "") {
+                sendChat(input);
+            }
+            // Returning early so Minecraft doesn't also process it (optional)
+            return;
+        }
+
+        // Call original method for other keys
+        originalKeyTyped.call(this, typedChar, keyCode);
+    };
+
+    // Also hook for when no GUI is open (just in case)
+    window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown);
+
+    // Fallback window listener for when no GUI is open
+    function onKeyDown(e) {
+        if (e.ctrlKey || e.altKey || e.metaKey) return;
+        if (String(e.key).toLowerCase() === 'p') {
+            if (!mc.currentScreen) {
+                const input = window.prompt("Input chat/command:", "");
+                if (input !== null && input !== "") {
+                    sendChat(input);
+                }
+            }
+        }
+    }
+
+    ModAPI.meta.title("Chat Prompt on P (GUI compatible)");
+    ModAPI.meta.description("Press P to input chat message, works even in GUIs.");
+})();
