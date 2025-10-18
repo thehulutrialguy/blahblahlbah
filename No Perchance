@@ -1,0 +1,40 @@
+(() => {
+    // Require player API (your original code does this)
+    ModAPI.require("player");
+
+    // Shortcut to Minecraft instance for GUI checks
+    const mc = ModAPI.mc;
+
+    // Function to send chat message (using your original style)
+    const sendChat = (msg) => {
+        if (!msg) return;
+        ModAPI.player.sendChatMessage(ModAPI.util.str(msg));
+    };
+
+    // Keydown event handler
+    function onKeyDown(e) {
+        // Ignore if any modifier keys are held down (Ctrl, Alt, Meta)
+        if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+        // Check if the key pressed is 'p' (case-insensitive)
+        if (String(e.key).toLowerCase() === 'p') {
+            // Only proceed if no GUI screen is open (so no chat or menu active)
+            if (!mc.currentScreen) {
+                // Prompt user for chat input
+                const input = window.prompt("Input chat/command:", "");
+                if (input !== null && input !== "") {
+                    sendChat(input);
+                }
+            }
+        }
+    }
+
+    // Remove old listener if any, then add our keydown listener
+    window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown);
+
+    // Metadata (optional)
+    ModAPI.meta.title("Chat Prompt on P");
+    ModAPI.meta.description("Press P to input a chat message and send it.");
+
+})();
