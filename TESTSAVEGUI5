@@ -1,0 +1,93 @@
+function button_utility_script(inputArr, bindingClass, actionBindMode) {
+    actionBindMode ||= 0;
+
+    var button = ModAPI.reflect.getClassById("net.minecraft.client.gui.GuiButton").constructors.find(x => x.length === 6);
+
+    var originalInit = ModAPI.hooks.methods[
+        ModAPI.util.getMethodFromPackage(bindingClass, "initGui")
+    ];
+
+    var originalActionPerformed = ModAPI.hooks.methods[
+        ModAPI.util.getMethodFromPackage(
+            "net.minecraft.client.gui.GuiScreen",
+            "actionPerformed"
+        )
+    ];
+
+    var out = inputArr.flatMap(x => {
+        return button(
+            x.uid,
+            x.x,
+            x.y,
+            x.w,
+            x.h,
+            ModAPI.util.str(x.text)
+        );
+    });
+
+    function handleButton(...args) {
+        var id = ModAPI.util.wrap(args[1]).getCorrective().id;
+        var jsAction = inputArr.find(x => x.uid === id);
+
+        if (jsAction) {
+            jsAction.click(ModAPI.util.wrap(args[0]));
+            return true;
+        }
+
+        return false;
+    }
+
+    // GuiScreen buttons
+    ModAPI.hooks.methods[
+        ModAPI.util.getMethodFromPackage(
+            "net.minecraft.client.gui.GuiScreen",
+            "actionPerformed"
+        )
+    ] = function (...args) {
+        if (handleButton(...args)) {
+            return;
+        }
+
+        return originalActionPerformed.apply(this, args);
+    };
+
+    // GuiContainer buttons
+    ModAPI.hooks.methods[
+        ModAPI.util.getMethodFromPackage(
+            bindingClass,
+            "initGui"
+        )
+    ] = function (...args) {
+        originalInit.apply(this, args);
+
+        var gui = ModAPI.util.wrap(args[0]).getCorrective();
+
+        out.forEach(guiButton => {
+            gui.buttonList.add(guiButton);
+        });
+    };
+
+    // GuiInventory has its own actionPerformed
+    var inventoryAction =
+        ModAPI.hooks.methods[
+            ModAPI.util.getMethodFromPackage(
+                "net.minecraft.client.gui.inventory.GuiInventory",
+                "actionPerformed"
+            )
+        ];
+
+    if (inventoryAction) {
+        ModAPI.hooks.methods[
+            ModAPI.util.getMethodFromPackage(
+                "net.minecraft.client.gui.inventory.GuiInventory",
+                "actionPerformed"
+            )
+        ] = function (...args) {
+            if (handleButton(...args)) {
+                return;
+            }
+
+            return inventoryAction.apply(this, args);
+        };
+    }
+}
